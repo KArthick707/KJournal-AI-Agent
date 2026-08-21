@@ -1,0 +1,37 @@
+name: Build Windows app
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - "claude/**"
+    paths:
+      - "journal/**"
+      - "desktop_app.py"
+      - "requirements.txt"
+      - "requirements-desktop.txt"
+      - "journalagent.spec"
+      - ".github/workflows/build-windows.yml"
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements-desktop.txt
+
+      - name: Build with PyInstaller
+        run: pyinstaller journalagent.spec
+
+      - name: Upload built exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: JournalAgent-windows
+          path: dist/JournalAgent.exe

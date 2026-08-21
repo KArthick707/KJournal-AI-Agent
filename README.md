@@ -57,6 +57,42 @@ Then open `http://127.0.0.1:8000` in your browser. Voice recording needs
 microphone permission, which browsers only grant on `localhost`/`127.0.0.1`
 or HTTPS — the default host already satisfies that.
 
+## Windows desktop app
+
+`desktop_app.py` runs the same app inside a native window (via
+[pywebview](https://pywebview.flowrz.com/), using Windows' built-in WebView2
+runtime) instead of a browser tab, and `journalagent.spec` packages it into a
+single `JournalAgent.exe` with [PyInstaller](https://pyinstaller.org/).
+
+There's no Windows machine in this project's dev loop, so the `.exe` is built
+by CI, not locally:
+
+1. Push to this branch (or run the **Build Windows app** workflow manually
+   from the Actions tab — "Run workflow").
+2. Once it finishes, open the workflow run and download the
+   `JournalAgent-windows` artifact — that's `JournalAgent.exe`.
+3. Double-click it. It starts the server in the background (data saved to
+   `%APPDATA%\JournalAIAgent`, not a temp folder) and opens a window pointed
+   at it.
+
+To build it yourself instead:
+
+```bash
+pip install -r requirements-desktop.txt
+pyinstaller journalagent.spec
+```
+
+**Untested caveat:** the **Speak** tab's live transcription relies on the
+browser's Web Speech API. In a real Chrome/Edge tab this works because those
+are official Google/Microsoft builds with a speech backend baked in — plain
+open-source Chromium (e.g. what Electron bundles) doesn't have one, so voice
+transcription silently fails there. WebView2 is built on the same engine as
+Edge and *should* carry the same working speech backend, but I have no
+Windows machine to actually confirm that — audio recording and playback
+should work regardless either way, since those don't depend on the speech
+service. If transcription doesn't work in the packaged app, that's the first
+thing to check.
+
 ## Configuration
 
 All environment variables are optional; see `journal/config.py` for defaults.
