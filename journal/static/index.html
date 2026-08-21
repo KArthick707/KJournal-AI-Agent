@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Journal</title>
+<link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+<header class="app-header">
+  <h1>Journal</h1>
+  <input type="search" id="search-input" placeholder="Search your journal…" />
+</header>
+
+<main>
+  <section class="capture-card">
+    <div class="tabs" role="tablist">
+      <button class="tab active" data-mode="typed" type="button">Write</button>
+      <button class="tab" data-mode="voice" type="button">Speak</button>
+      <button class="tab" data-mode="upload" type="button">Upload audio</button>
+    </div>
+
+    <div class="capture-panel" data-panel="typed">
+      <textarea id="typed-text" placeholder="What's on your mind?" rows="6"></textarea>
+      <div class="actions">
+        <button id="save-typed" class="btn-primary" type="button">Save entry</button>
+      </div>
+    </div>
+
+    <div class="capture-panel hidden" data-panel="voice">
+      <div class="recorder">
+        <button id="record-toggle" class="btn-record" type="button">● Start recording</button>
+        <span id="record-status" class="record-status"></span>
+      </div>
+      <textarea id="voice-transcript" placeholder="Your words will appear here as you speak…" rows="6"></textarea>
+      <audio id="voice-preview" controls class="hidden"></audio>
+      <div class="actions">
+        <button id="save-voice" class="btn-primary hidden" type="button">Save entry</button>
+      </div>
+    </div>
+
+    <div class="capture-panel hidden" data-panel="upload">
+      <input type="file" id="upload-file" accept="audio/*">
+      <textarea id="upload-transcript" placeholder="Optional: type a transcript (auto-transcription isn't available for uploaded files)" rows="4"></textarea>
+      <div class="actions">
+        <button id="save-upload" class="btn-primary" type="button">Save entry</button>
+      </div>
+    </div>
+
+    <p id="capture-error" class="error hidden"></p>
+  </section>
+
+  <section class="entries" id="entries">
+    <p class="empty-state" id="empty-state">No entries yet — write or speak your first one above.</p>
+  </section>
+</main>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
