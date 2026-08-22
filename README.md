@@ -28,6 +28,32 @@ investigate and no tools to call, so `journal/agent.py` makes one
 `ANTHROPIC_API_KEY` is configured, saving still works — the entry is stored
 with the raw text as its body instead of blocking on a missing key.
 
+## Security
+
+This app has no login and is meant to be used by one person, on their own
+machine. That model only holds as long as the server stays loopback-only, so
+a few things enforce and account for that:
+
+- **No cross-site writes.** A browser attaches `Origin` to POST requests
+  whether or not they're cross-site, and unlike the request body, a page
+  can't forge it — so any request with an `Origin` that doesn't match the
+  server's own is rejected (403). Without this, any website you have open in
+  the same browser could silently POST fake entries (or run up your Claude
+  API bill) purely because the server trusted every request that reached it.
+- **Binding beyond loopback requires an explicit opt-in.** Setting
+  `JOURNAL_HOST` to anything other than `127.0.0.1`/`localhost` refuses to
+  start unless `JOURNAL_ALLOW_REMOTE=1` is also set — because there's still
+  no login, so a non-loopback host means anyone on your network can read,
+  write, and hear your journal. Set that only if you've deliberately decided
+  you want it reachable that way.
+- **Uploaded audio is stored under a validated extension**, not whatever the
+  uploading client claims — an unrecognized extension is normalized to
+  `.bin` so it can never later be served back with a browser-guessed
+  `Content-Type` like `text/html`.
+- **`/audio/{filename}` only serves filenames matching the exact format this
+  app generates** (a hex UUID + a known extension), rather than trying to
+  blocklist specific bad characters.
+
 ## Known limitations
 
 - **Uploaded audio files are not auto-transcribed.** The only way to get a
@@ -103,16 +129,20 @@ All environment variables are optional; see `journal/config.py` for defaults.
 | `JOURNAL_MODEL` | Model override (default `claude-opus-5`). |
 | `JOURNAL_HOST` / `JOURNAL_PORT` | Where the local web app listens (default `127.0.0.1:8000`). |
 | `JOURNAL_DATA_DIR` | Where the SQLite database and saved audio files live (default `./data`). |
+| `JOURNAL_MAX_AUDIO_BYTES` | Cap on a single uploaded/recorded audio file (default 100MB). |
+| `JOURNAL_ALLOW_REMOTE` | Required (`1`/`true`) to start with a non-loopback `JOURNAL_HOST` — see *Security* above. |
 
 ## Tests
 
 ```bash
-pip install pytest
+pip install pytest httpx
 python -m pytest tests/ -v
 ```
 
-Tests cover the SQLite storage layer directly and `agent.py`'s structuring
-call with the Anthropic client mocked — no network calls, no real LLM calls.
+Tests cover the SQLite storage layer directly, `agent.py`'s structuring call
+with the Anthropic client mocked, and `app.py`'s request-level behavior
+(cross-site rejection, audio validation, host guard) via FastAPI's
+`TestClient` — no network calls, no real LLM calls.
 
 ## What's next
 

@@ -4,19 +4,52 @@ browses entries."""
 
 import mimetypes
 import os
+import re
 import uuid
 from datetime import datetime
 
-from fastapi import FastAPI, Form, HTTPException, UploadFile, File
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, Form, HTTPException, Request, UploadFile, File
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import agent, config, db
 
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 VALID_SOURCES = ("typed", "voice", "upload")
+UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+
+# Extensions we trust enough to serve back with a browser-guessed Content-Type.
+# Anything else still gets saved (raw bytes preserved), just under a neutral
+# extension so it can never be served back as e.g. text/html.
+SAFE_AUDIO_EXTENSIONS = {
+    ".webm", ".mp3", ".wav", ".m4a", ".ogg", ".oga", ".mp4", ".aac", ".flac", ".3gp", ".amr", ".opus",
+}
+FALLBACK_AUDIO_EXTENSION = ".bin"
+
+# Exactly matches the <uuid4-hex>.<ext> filenames _save_audio generates --
+# an allowlist is a stricter, harder-to-bypass guard than blocking specific
+# "bad" characters (e.g. "/", "..") one at a time.
+_SAFE_AUDIO_FILENAME = re.compile(r"^[0-9a-f]{32}\.[A-Za-z0-9]{1,8}$")
 
 app = FastAPI(title="Journal AI Agent")
+
+
+@app.middleware("http")
+async def _reject_cross_site_writes(request: Request, call_next):
+    """This app has no login, so the only thing standing between "a website
+    you have open" and "a forged write to your journal" is this check. A
+    browser attaches Origin on state-changing requests whether or not
+    they're cross-site, and unlike the request body, it can't be forged by
+    the page making the request -- so reject only when it's present AND
+    doesn't match this same request's own host. Non-browser tools (curl,
+    tests) send no Origin at all and are unaffected."""
+    if request.method in UNSAFE_METHODS:
+        origin = request.headers.get("origin")
+        self_origin = f"{request.url.scheme}://{request.url.netloc}"
+        if origin and origin != self_origin:
+            return JSONResponse({"detail": "cross-site requests are not allowed"}, status_code=403)
+    return await call_next(request)
+
 
 _conn = None
 
@@ -48,11 +81,25 @@ def _fallback_title(raw_text: str) -> str:
     return f"Journal entry — {datetime.now().strftime('%b %d, %Y')}"
 
 
+def _safe_audio_extension(filename: str) -> str:
+    """Never trust the client-supplied extension enough to serve it back
+    as-is: an unrecognized one (e.g. ".html") could get guessed into a
+    dangerous Content-Type later, so it's normalized to a neutral extension
+    that mimetypes.guess_type won't map to anything renderable."""
+    ext = os.path.splitext(filename or "")[1].lower()
+    return ext if ext in SAFE_AUDIO_EXTENSIONS else FALLBACK_AUDIO_EXTENSION
+
+
 async def _save_audio(audio: UploadFile) -> str:
-    ext = os.path.splitext(audio.filename or "")[1] or ".webm"
+    ext = _safe_audio_extension(audio.filename or "")
     name = f"{uuid.uuid4().hex}{ext}"
     dest = os.path.join(_audio_dir(), name)
+
+    max_bytes = config.get_max_audio_bytes()
     contents = await audio.read()
+    if len(contents) > max_bytes:
+        raise HTTPException(413, f"audio file too large (max {max_bytes} bytes)")
+
     with open(dest, "wb") as fh:
         fh.write(contents)
     return name
@@ -65,7 +112,7 @@ def index():
 
 @app.get("/audio/{filename}")
 def get_audio(filename: str):
-    if "/" in filename or "\\" in filename or ".." in filename:
+    if not _SAFE_AUDIO_FILENAME.match(filename):
         raise HTTPException(400, "invalid filename")
     path = os.path.join(_audio_dir(), filename)
     if not os.path.isfile(path):

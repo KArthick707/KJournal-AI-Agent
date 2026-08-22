@@ -54,6 +54,8 @@ def main() -> None:
     port = config.get_port()
     url = f"http://{host}:{port}"
 
+    config.require_safe_host(host)  # raises config.UnsafeHostError if unsafe -- fail loudly, not silently
+
     server_thread = threading.Thread(target=_run_server, args=(host, port), daemon=True)
     server_thread.start()
     _wait_until_ready(url)
